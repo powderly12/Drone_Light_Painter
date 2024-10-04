@@ -106,7 +106,6 @@ def main():
                 if values['-LINE-']== True:
                     graph.draw_point(lastxy, size=15, color=current_color)
                     lines[COLORS.index(current_color)].append(lastxy)
-
         elif event.endswith('+UP'):  
             info = window["info"]
             info.update(value=f"grabbed rectangle from {start_point} to {end_point}")
