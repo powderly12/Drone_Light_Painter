@@ -21,7 +21,8 @@ def simple_connect():
 deck_attached_event = Event()
 
 COLORS = ['Red', 'Green', 'Blue']
-DEFAULT_HEIGHT = 0.2
+DEFAULT_HEIGHT = 0.5
+
 #we draw on the xz plane
 #Different colour move back in the y axis
 def log_pos_callback(timestamp, data, logconf):
@@ -29,6 +30,7 @@ def log_pos_callback(timestamp, data, logconf):
     global position_estimate
     position_estimate[0] = data['stateEstimate.x']
     position_estimate[1] = data['stateEstimate.y']
+    position_estimate[2] = data['stateEstimate.z']
 
 def param_deck_flow(_, value_str):
     value = int(value_str)
@@ -39,15 +41,15 @@ def param_deck_flow(_, value_str):
     else:
         print('Deck is NOT attached!')
 
-def moveY(mc, scf, y, velocity=0.3):
+def moveY(mc, y):
     mc.move_distance(0, y, 0, velocity=0.2)
     time.sleep(0.5)
 
     
-def moveXZ(mc, scf, x, z, velocity=0.3):
+def moveXZ(mc, x, z, velocity=0.3):
     scale_x = 5
     scale_z = 1.5
-    mc.move_distance(x * scale_x, 0.0, z * scale_x, velocity)
+    mc.move_distance(x * scale_x, 0.0, z * scale_z, velocity)
     time.sleep(0.5)
 
 def take_off_simple(scf):
@@ -55,12 +57,45 @@ def take_off_simple(scf):
         time.sleep(3)
         mc.stop()
 
-def connect_to_drone(dronechannel):
+def draw_lines(lines, scf):
     """
-    Connects to the desired drone choosen by the user in the GUI, Returns drone status (connected or not connected),
-    Positions drone in starting positions for drawing and turns on LED
+    Trace lines
     """
-    #Drone initialisation
+    #check if the drone has red lines
+    # A circle creates 425 samples we should down sample this to 10 points per layer
+    with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
+        time.sleep(0.5)
+        #set origin point based on loggeing data...
+        samplingFactor= 10
+        if lines[0]:
+            moveY(mc,-0.1)
+            time.sleep(0.5)
+            numberOfPoints = len(lines[0])
+            redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
+            moveXZ(redWaypoints)
+        if lines[1]:
+            moveY(mc,0.1)
+            time.sleep(0.5)
+            numberOfPoints = len(lines[1])
+            GreenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            moveXZ(mc,GreenWaypoints)
+        if lines[2]:
+            moveY(mc,0.1)
+            time.sleep(0.5)
+            numberOfPoints = len(lines[2])
+            GreenWaypoints = lines[2][0::round(numberOfPoints/samplingFactor)]
+            moveXZ(mc,GreenWaypoints)
+
+        mc.land()
+
+
+def submit_drawing(lines,dronechannel):
+    """
+    This takes the line coordinated drawn by the user and converts them into 
+    Movement instruction for the drone
+    will have to address gap in drawings
+    """
+    #Connect to drone and start logging
     cflib.crtp.init_drivers()
 
     with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
@@ -72,6 +107,7 @@ def connect_to_drone(dronechannel):
         logconf = LogConfig(name='Position', period_in_ms=10)
         logconf.add_variable('stateEstimate.x', 'float')
         logconf.add_variable('stateEstimate.y', 'float')
+        logconf.add_variable('stateEstimate.z', 'float')
         scf.cf.log.add_config(logconf)
         logconf.data_received_cb.add_callback(log_pos_callback)
 
@@ -81,36 +117,9 @@ def connect_to_drone(dronechannel):
 
         logconf.start()
         take_off_simple(scf)
-        return scf
-
-def submit_drawing(lines,mc,scf):
-    """
-    This takes the line coordinated drawn by the user and converts them into 
-    Movement instruction for the drone
-    will have to address gap in drawings
-    """
-    #check if the drone has red lines
-    # A circle creates 425 samples we should down sample this to 10 points per layer
-    mc.take_off(0.2, 0.3)
-
-    time.sleep(0.5)
-    samplingFactor= 10
-    if lines[0]:
-        moveY(mc,scf,-0.1)
-        time.sleep(0.5)
-        #numberOfPoints = len(lines[0])
-        #redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
-        #moveXZ(redWaypoints)
-    if lines[1]:
-        moveY(mc,scf,0.1)
-        time.sleep(0.5)
-
-    if lines[2]:
-        moveY(mc,scf,0.1)
-        time.sleep(0.5)
-
-    mc.land()
-    return
+        return
+    
+    #return
 
 DRONE_CHANNEL =['radio://0/19/2M/EE5C21CF18','Radio://0/26/2M/EE5C21CF28']
 
@@ -124,7 +133,6 @@ def main():
     #GUI Initialisation
     rightColumn = [[sg.T('Controls:', enable_events=True)],
                    [sg.Text('Choose Drone Channel:'), sg.Combo(DRONE_CHANNEL, default_value='radio://0/26/2M/EE5C21CF25', key='-CHANNEL-')],
-                   [sg.B('Connect to Drone', key='-DRONE-')],
                    [sg.R('Draw Line', 1, key='-LINE-', enable_events=True)],
                    [sg.Text('Choose Color:'), sg.Combo(COLORS, default_value='Red', key='-COLOR-')],
                    [sg.B('Submit Drawing', key='-DRAWING-')]]
@@ -190,12 +198,9 @@ def main():
             dragging = False
         elif event == '-CHANNEL-':
             dronechannel = values['-CHANNEL-']
-        elif event == '-DRONE-':
-            scf = connect_to_drone(dronechannel)
         elif event == '-DRAWING-':
-                mc = MotionCommander(scf)
-                take_off_simple(scf)
-                #submit_drawing(lines,mc,scf)
+               
+                submit_drawing(lines,dronechannel)
 
     window.close()
 
