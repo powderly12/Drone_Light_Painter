@@ -1,9 +1,14 @@
 import PySimpleGUI as sg
 import logging
+import sys
 import time
+from threading import Event
+
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
+from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.positioning.motion_commander import MotionCommander
 from cflib.utils import uri_helper
 
 
@@ -13,11 +18,26 @@ def simple_connect():
     print("Now I will disconnect :'(")
 
 
+deck_attached_event = Event()
 
 COLORS = ['Red', 'Green', 'Blue']
-
+DEFAULT_HEIGHT = 0.2
 #we draw on the xz plane
 #Different colour move back in the y axis
+def log_pos_callback(timestamp, data, logconf):
+    print(data)
+    global position_estimate
+    position_estimate[0] = data['stateEstimate.x']
+    position_estimate[1] = data['stateEstimate.y']
+
+def param_deck_flow(_, value_str):
+    value = int(value_str)
+    print(value)
+    if value:
+        deck_attached_event.set()
+        print('Deck is attached!')
+    else:
+        print('Deck is NOT attached!')
 
 def moveY(mc, scf, y, velocity=0.3):
     mc.move_distance(0, y, 0, velocity=0.2)
@@ -30,18 +50,38 @@ def moveXZ(mc, scf, x, z, velocity=0.3):
     mc.move_distance(x * scale_x, 0.0, z * scale_x, velocity)
     time.sleep(0.5)
 
+def take_off_simple(scf):
+    with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
+        time.sleep(3)
+        mc.stop()
+
 def connect_to_drone(dronechannel):
     """
     Connects to the desired drone choosen by the user in the GUI, Returns drone status (connected or not connected),
     Positions drone in starting positions for drawing and turns on LED
     """
-    # URI to the Crazyflie to connect to
-    uri = uri_helper.uri_from_env(default=dronechannel)
-    # Initialize the low-level drivers
+    #Drone initialisation
     cflib.crtp.init_drivers()
 
-    with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        simple_connect()
+    with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
+
+        scf.cf.param.add_update_callback(group='deck', name='bcFlow2',
+                                         cb=param_deck_flow)
+        time.sleep(1)
+
+        logconf = LogConfig(name='Position', period_in_ms=10)
+        logconf.add_variable('stateEstimate.x', 'float')
+        logconf.add_variable('stateEstimate.y', 'float')
+        scf.cf.log.add_config(logconf)
+        logconf.data_received_cb.add_callback(log_pos_callback)
+
+        if not deck_attached_event.wait(timeout=5):
+            print('No flow deck detected!')
+            sys.exit(1)
+
+        logconf.start()
+        take_off_simple(scf)
+        return scf
 
 def submit_drawing(lines,mc,scf):
     """
@@ -72,12 +112,14 @@ def submit_drawing(lines,mc,scf):
     mc.land()
     return
 
-DRONE_CHANNEL =['radio://0/26/2M/EE5C21CF25','Radio://0/26/2M/EE5C21CF28']
+DRONE_CHANNEL =['radio://0/19/2M/EE5C21CF18','Radio://0/26/2M/EE5C21CF28']
 
 
 
 
 def main():
+
+
 
     #GUI Initialisation
     rightColumn = [[sg.T('Controls:', enable_events=True)],
@@ -149,13 +191,11 @@ def main():
         elif event == '-CHANNEL-':
             dronechannel = values['-CHANNEL-']
         elif event == '-DRONE-':
-            connect_to_drone(dronechannel)
+            scf = connect_to_drone(dronechannel)
         elif event == '-DRAWING-':
-        
-            with SyncCrazyflie(dronechannel) as scf:
-
                 mc = MotionCommander(scf)
-                submit_drawing(lines,mc,scf)
+                take_off_simple(scf)
+                #submit_drawing(lines,mc,scf)
 
     window.close()
 

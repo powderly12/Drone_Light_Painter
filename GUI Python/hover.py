@@ -12,7 +12,7 @@ import cflib.crtp
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
-URI = 'radio://0/26/2M/EE5C21CF25'
+URI = 'radio://0/19/2M/EE5C21CF18'
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
@@ -34,4 +34,4 @@ if __name__ == '__main__':
         time.sleep(0.5)
         mc.up(0.3)
         time.sleep(0.5)
-        mc.land()
+        mc.land(0.5)
