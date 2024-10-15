@@ -1,5 +1,4 @@
 import PySimpleGUI as sg
-from PIL import ImageGrab
 import logging
 import time
 import cflib.crtp
@@ -17,26 +16,61 @@ def simple_connect():
 
 COLORS = ['Red', 'Green', 'Blue']
 
+#we draw on the xz plane
+#Different colour move back in the y axis
+
+def moveY(mc, scf, y, velocity=0.3):
+    mc.move_distance(0, y, 0, velocity=0.2)
+    time.sleep(0.5)
+
+    
+def moveXZ(mc, scf, x, z, velocity=0.3):
+    scale_x = 5
+    scale_z = 1.5
+    mc.move_distance(x * scale_x, 0.0, z * scale_x, velocity)
+    time.sleep(0.5)
+
 def connect_to_drone(dronechannel):
     """
     Connects to the desired drone choosen by the user in the GUI, Returns drone status (connected or not connected),
     Positions drone in starting positions for drawing and turns on LED
     """
-    return
     # URI to the Crazyflie to connect to
-    uri = uri_helper.uri_from_env(default='dronechannel')
+    uri = uri_helper.uri_from_env(default=dronechannel)
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         simple_connect()
 
-def submit_drawing(lines):
+def submit_drawing(lines,mc,scf):
     """
     This takes the line coordinated drawn by the user and converts them into 
     Movement instruction for the drone
     will have to address gap in drawings
     """
+    #check if the drone has red lines
+    # A circle creates 425 samples we should down sample this to 10 points per layer
+    mc.take_off(0.2, 0.3)
+
+    time.sleep(0.5)
+    samplingFactor= 10
+    if lines[0]:
+        moveY(mc,scf,-0.1)
+        time.sleep(0.5)
+        #numberOfPoints = len(lines[0])
+        #redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
+        #moveXZ(redWaypoints)
+    if lines[1]:
+        moveY(mc,scf,0.1)
+        time.sleep(0.5)
+
+    if lines[2]:
+        moveY(mc,scf,0.1)
+        time.sleep(0.5)
+
+    mc.land()
+    return
 
 DRONE_CHANNEL =['radio://0/26/2M/EE5C21CF25','Radio://0/26/2M/EE5C21CF28']
 
@@ -45,6 +79,7 @@ DRONE_CHANNEL =['radio://0/26/2M/EE5C21CF25','Radio://0/26/2M/EE5C21CF28']
 
 def main():
 
+    #GUI Initialisation
     rightColumn = [[sg.T('Controls:', enable_events=True)],
                    [sg.Text('Choose Drone Channel:'), sg.Combo(DRONE_CHANNEL, default_value='radio://0/26/2M/EE5C21CF25', key='-CHANNEL-')],
                    [sg.B('Connect to Drone', key='-DRONE-')],
@@ -116,7 +151,11 @@ def main():
         elif event == '-DRONE-':
             connect_to_drone(dronechannel)
         elif event == '-DRAWING-':
-            submit_drawing(lines)
+        
+            with SyncCrazyflie(dronechannel) as scf:
+
+                mc = MotionCommander(scf)
+                submit_drawing(lines,mc,scf)
 
     window.close()
 
