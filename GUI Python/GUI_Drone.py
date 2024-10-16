@@ -21,8 +21,10 @@ def simple_connect():
 deck_attached_event = Event()
 
 COLORS = ['Red', 'Green', 'Blue']
-DEFAULT_HEIGHT = 0.5
+DEFAULT_HEIGHT = 0.6
+BOX_LIMIT = 1
 position_estimate =[0,0,0]
+origin =[0,0,0]
 #we draw on the xz plane
 #Different colour move back in the y axis
 def log_pos_callback(timestamp, data, logconf):
@@ -40,38 +42,66 @@ def param_deck_flow(_, value_str):
     else:
         print('Deck is NOT attached!')
 
-def moveY(mc, y):
+def moveY(mc, y, origin):
     mc.move_distance(0, y, 0, velocity=0.2)
-    time.sleep(0.5)
+    time.sleep(0.1)
 
     
-def moveXZ(mc, x, z, velocity=0.3):
-    scale_x = 5
-    scale_z = 1.5
-    mc.move_distance(x * scale_x, 0.0, z * scale_z, velocity)
-    time.sleep(0.5)
+def moveXZ(line, currentPosition, mc, velocity=0.3):
+    
+    for i in range(0,len(line)):# THIS SHOULD WORK BUT DOESN'T INCLUDE LOGGING SO SOMETHING IS MISSING
+            if ((currentPosition[0] - line[i][0]) <= BOX_LIMIT) and ((currentPosition[2] - line[i][1]) <= BOX_LIMIT):
+                newX = currentPosition[0] - line[i][0]
+                newZ = currentPosition[2] - line[i][1]
+                mc.move_distance(newX, 0.0, newZ, velocity)
+                currentPosition[0] = currentPosition[0] + newX
+                currentPosition[2] = currentPosition[1] + newZ
+                time.sleep(0.1)
+            else:
+                newX = currentPosition[0] - line[i][0]
+                newZ = currentPosition[2] - line[i][1]
+                mc.move_distance(BOX_LIMIT - currentPosition[0], 0.0, BOX_LIMIT - currentPosition[2], velocity)
+                currentPosition[0] = currentPosition[0] + newX
+                currentPosition[2] = currentPosition[2] + newZ
+                time.sleep(0.1)
+    return currentPosition
 
 def take_off_simple(scf):
     with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
         time.sleep(3)
         mc.stop()
 
+def normalising_corridinates(line):
+    for i in range(0,len(line)):
+        for j in range(0,len(line[0])):
+            if line[i][j] < 0:
+                line[i][j] = 0
+            if line[i][j] > 800:
+                line[i][j] = 800
+            #normalise to be corrdinates between 1 and 0
+            line[i][j] = line[i][j]/800 
+    return line
+        
+
 def draw_lines(lines, scf):
     """
     Trace lines
     """
-    #check if the drone has red lines
+    #check if the d rone has red lines
     # A circle creates 425 samples we should down sample this to 10 points per layer
     with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
-        time.sleep(0.5)
+        time.sleep(3)
+        origin = position_estimate
         #set origin point based on loggeing data...
         samplingFactor= 10
         if lines[0]:
-            moveY(mc,-0.1)
+            
+            moveY(mc,-0.1, 0)
             time.sleep(0.5)
             numberOfPoints = len(lines[0])
             redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
-            moveXZ(redWaypoints)
+            redline = normalising_corridinates(redWaypoints)
+            orign = moveXZ(redline, origin, mc)
         if lines[1]:
             moveY(mc,0.1)
             time.sleep(0.5)
@@ -115,7 +145,7 @@ def submit_drawing(lines,dronechannel):
             sys.exit(1)
 
         logconf.start()
-        take_off_simple(scf)
+        draw_lines(lines,scf)
         return
     
     #return
@@ -184,7 +214,7 @@ def main():
                 end_point = (x, y)
             #if prior_rect:
                 #graph.delete_figure(prior_rect)
-            lastxy = x,y
+            lastxy = [x,y]
             if None not in (start_point, end_point):
                 current_color = values['-COLOR-']
                 if values['-LINE-']== True:
