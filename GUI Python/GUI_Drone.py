@@ -22,12 +22,11 @@ deck_attached_event = Event()
 
 COLORS = ['Red', 'Green', 'Blue']
 DEFAULT_HEIGHT = 0.5
-
+position_estimate =[0,0,0]
 #we draw on the xz plane
 #Different colour move back in the y axis
 def log_pos_callback(timestamp, data, logconf):
     print(data)
-    global position_estimate
     position_estimate[0] = data['stateEstimate.x']
     position_estimate[1] = data['stateEstimate.y']
     position_estimate[2] = data['stateEstimate.z']
