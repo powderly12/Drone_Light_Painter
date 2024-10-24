@@ -10,6 +10,7 @@ from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
 from cflib.utils import uri_helper
+from cflib.positioning.position_hl_commander import PositionHlCommander
 
 
 def simple_connect():
@@ -27,6 +28,27 @@ position_estimate =[0,0,0]
 origin =[0,0,0]
 #we draw on the xz plane
 #Different colour move back in the y axis
+def ringOff(scf):
+    scf.cf.param.set_value('ring.solidRed', "0")
+    scf.cf.param.set_value('ring.solidGreen', "0")
+    scf.cf.param.set_value('ring.solidBlue', "0")
+
+def ringRed(scf):
+    scf.cf.param.set_value('ring.solidRed', "255")
+    scf.cf.param.set_value('ring.solidGreen', "0")
+    scf.cf.param.set_value('ring.solidBlue', "0")
+
+def ringBlue(scf):
+    scf.cf.param.set_value('ring.solidRed', "0")
+    scf.cf.param.set_value('ring.solidGreen', "0")
+    scf.cf.param.set_value('ring.solidBlue', "255")
+
+def ringGreen(scf):
+    scf.cf.param.set_value('ring.solidRed', "0")
+    scf.cf.param.set_value('ring.solidGreen', "255")
+    scf.cf.param.set_value('ring.solidBlue', "0")
+
+
 def log_pos_callback(timestamp, data, logconf):
     print(data)
     position_estimate[0] = data['stateEstimate.x']
@@ -42,34 +64,40 @@ def param_deck_flow(_, value_str):
     else:
         print('Deck is NOT attached!')
 
-def moveY(mc, y, origin):
-    mc.move_distance(0, y, 0, velocity=0.2)
-    time.sleep(0.1)
+def moveX(pc, x):
+    pc.go_to(x, 0, 0, velocity=0.2)
+    
 
     
-def moveXZ(line, currentPosition, mc, velocity=0.3):
+def moveXZ(line, XOffset, pc, velocity=0.2):
     
     for i in range(0,len(line)):# THIS SHOULD WORK BUT DOESN'T INCLUDE LOGGING SO SOMETHING IS MISSING
-            if ((currentPosition[0] - line[i][0]) <= BOX_LIMIT) and ((currentPosition[2] - line[i][1]) <= BOX_LIMIT):
-                newX = currentPosition[0] - line[i][0]
-                newZ = currentPosition[2] - line[i][1]
-                mc.move_distance(newX, 0.0, newZ, velocity)
-                currentPosition[0] = currentPosition[0] + newX
-                currentPosition[2] = currentPosition[1] + newZ
-                time.sleep(0.1)
-            else:
-                newX = currentPosition[0] - line[i][0]
-                newZ = currentPosition[2] - line[i][1]
-                mc.move_distance(BOX_LIMIT - currentPosition[0], 0.0, BOX_LIMIT - currentPosition[2], velocity)
-                currentPosition[0] = currentPosition[0] + newX
-                currentPosition[2] = currentPosition[2] + newZ
-                time.sleep(0.1)
-    return currentPosition
+            
+            if i == 0:
+                pc.go_to(0, 0, line[i][1], velocity)
+                time.sleep(0.2)
+                pc.go_to(XOffset, 0, line[i][1], velocity)
+                time.sleep(0.2)
+                pc.go_to(XOffset, line[i][0], line[i][1], velocity)
+                time.sleep(0.2)
+            pc.go_to(XOffset, line[i][0], line[i][1], velocity)
+            time.sleep(0.2) 
 
-def take_off_simple(scf):
-    with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
-        time.sleep(3)
-        mc.stop()
+           #if ((position_estimate[0] + (position_estimate[0] - line[i][0])) <= BOX_LIMIT) and ((position_estimate[2] + (position_estimate[2] - line[i][1])) <= BOX_LIMIT):
+            #    newX = position_estimate[0] - line[i][0]
+            #    newZ = position_estimate[2] - line[i][1]
+            #    mc.move_distance(newX, 0.0, newZ, velocity)
+            #else:
+            #    x=0
+                #newX = [0] - line[i][0]
+                #newZ = currentPosition[2] - line[i][1]
+                #mc.move_distance(BOX_LIMIT - currentPosition[0], 0.0, BOX_LIMIT - currentPosition[2], velocity)
+                #currentPosition[0] = currentPosition[0] + newX
+                #currentPosition[2] = currentPosition[2] + newZ
+                #time.sleep(0.1)
+    return 0
+
+
 
 def normalising_corridinates(line):
     for i in range(0,len(line)):
@@ -79,7 +107,11 @@ def normalising_corridinates(line):
             if line[i][j] > 800:
                 line[i][j] = 800
             #normalise to be corrdinates between 1 and 0
-            line[i][j] = line[i][j]/800 
+            line[i][j] = line[i][j]/800
+            if j ==0:#shift 
+                line[i][j] =line[i][j] - 0.5
+            else:
+                line[i][j] =line[i][j] + 0.2
     return line
         
 
@@ -89,33 +121,34 @@ def draw_lines(lines, scf):
     """
     #check if the d rone has red lines
     # A circle creates 425 samples we should down sample this to 10 points per layer
-    with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
-        time.sleep(3)
-        origin = position_estimate
-        #set origin point based on loggeing data...
-        samplingFactor= 10
+    scf.cf.param.set_value('ring.effect', "7")
+    ringOff(scf)
+    with PositionHlCommander(scf, controller=PositionHlCommander.CONTROLLER_PID) as pc:
+        samplingFactor= 8
         if lines[0]:
             
-            moveY(mc,-0.1, 0)
+            ringRed(scf)
             time.sleep(0.5)
             numberOfPoints = len(lines[0])
             redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
             redline = normalising_corridinates(redWaypoints)
-            orign = moveXZ(redline, origin, mc)
-        if lines[1]:
-            moveY(mc,0.1)
-            time.sleep(0.5)
-            numberOfPoints = len(lines[1])
-            GreenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
-            moveXZ(mc,GreenWaypoints)
-        if lines[2]:
-            moveY(mc,0.1)
-            time.sleep(0.5)
-            numberOfPoints = len(lines[2])
-            GreenWaypoints = lines[2][0::round(numberOfPoints/samplingFactor)]
-            moveXZ(mc,GreenWaypoints)
+            moveXZ(redline, -0.1, pc)
+            ringOff(scf)
 
-        mc.land()
+        #if lines[1]:
+            #moveY(mc,0.1)
+            #time.sleep(0.5)
+            #numberOfPoints = len(lines[1])
+            #GreenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            #moveXZ(mc,GreenWaypoints)
+        #if lines[2]:
+            #moveY(mc,0.1)
+            #time.sleep(0.5)
+            #numberOfPoints = len(lines[2])
+            #GreenWaypoints = lines[2][0::round(numberOfPoints/samplingFactor)]
+            #moveXZ(mc,GreenWaypoints)
+
+        pc.land()
 
 
 def submit_drawing(lines,dronechannel):
@@ -125,13 +158,16 @@ def submit_drawing(lines,dronechannel):
     will have to address gap in drawings
     """
     #Connect to drone and start logging
+
+    
     cflib.crtp.init_drivers()
 
     with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
+        
 
-        scf.cf.param.add_update_callback(group='deck', name='bcFlow2',
-                                         cb=param_deck_flow)
-        time.sleep(1)
+        #scf.cf.param.add_update_callback(group='deck', name='bcFlow2',
+         #                                cb=param_deck_flow)
+        #time.sleep(1)
 
         logconf = LogConfig(name='Position', period_in_ms=10)
         logconf.add_variable('stateEstimate.x', 'float')
@@ -140,9 +176,9 @@ def submit_drawing(lines,dronechannel):
         scf.cf.log.add_config(logconf)
         logconf.data_received_cb.add_callback(log_pos_callback)
 
-        if not deck_attached_event.wait(timeout=5):
-            print('No flow deck detected!')
-            sys.exit(1)
+        #if not deck_attached_event.wait(timeout=5):
+        #    print('No flow deck detected!')
+        #    sys.exit(1)
 
         logconf.start()
         draw_lines(lines,scf)
@@ -150,7 +186,7 @@ def submit_drawing(lines,dronechannel):
     
     #return
 
-DRONE_CHANNEL =['radio://0/19/2M/EE5C21CF18','Radio://0/26/2M/EE5C21CF28']
+DRONE_CHANNEL =['radio://0/19/2M/EE5C21CF18','Radio://0/26/2M/EE5C21CF25']
 
 
 
@@ -204,7 +240,7 @@ def main():
             graph.set_cursor(cursor='left_ptr')       # not yet released method... coming soon!
             # graph.Widget.config(cursor='left_ptr')
 
-        if event == "-GRAPH-":  # if there's a "Graph" event, then it's a mouse
+        if event == "-GRAPH-":  # if there's a " event, then it's a mouse
             x, y = values["-GRAPH-"]
             if not dragging:
                 start_point = (x, y)

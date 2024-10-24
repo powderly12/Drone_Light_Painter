@@ -11,7 +11,7 @@ def simple_connect():
             print("Now I will disconnect :'(")
 
 # URI to the Crazyflie to connect to
-uri = uri_helper.uri_from_env(default='radio://0/19/2M/EE5C21CF18')
+uri = uri_helper.uri_from_env(default='radio://0/26/2M/EE5C21CF25')
     # Initialize the low-level drivers
 cflib.crtp.init_drivers()
 
