@@ -403,17 +403,18 @@ if __name__ == '__main__':
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
-    uri = uri_helper.uri_from_env(default='radio://0/26/2M/EE5C21CF25')
+    uri = uri_helper.uri_from_env(default='radio://0/19/2M/EE5C21CF18')
 
     # Set a file name to write the measurement data to file. Useful for debugging
-    file_name = None
+    file_name = 'debug.txt'
     # file_name = 'lh_geo_estimate_data.pickle'
 
     connect_and_estimate(uri, file_name=file_name)
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         with PositionHlCommander(scf, controller=PositionHlCommander.CONTROLLER_PID) as pc:
-            
+            x=0
+            pc.land()
 
     # Run the estimation on data from file instead of live measurements
     # estimate_from_file(file_name)
