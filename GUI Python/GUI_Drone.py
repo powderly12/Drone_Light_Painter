@@ -333,30 +333,27 @@ def get_multiple_recordings(scf: SyncCrazyflie):
     return data
 
 
-def connect_and_estimate(uri: str, file_name: str | None = None):
+def connect_and_estimate(uri: str, infoBox,file_name: str | None = None):
     """Connect to a Crazyflie, collect data and estimate the geometry of the system"""
-    print(f'Step 1. Connecting to the Crazyflie on uri {uri}...')
+    infoBox.update(value=f'Step 1. Connecting to the Crazyflie on uri {uri}...')
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        print('  Connected')
-        print('')
-        print('In the 3 following steps we will define the coordinate system.')
-
-        print('Step 2. Put the Crazyflie where you want the origin of your coordinate system.')
-
+        infoBox.update(value='  Connected')
+        time.sleep(0.5)
+        infoBox.update(value='Step 2. Put the Crazyflie where you want the origin of your coordinate system. Look at terminal for step Instructions')
+        time.sleep(0.5)
         origin = get_recording(scf)
 
-        print(f'Step 3. Put the Crazyflie on the positive X-axis, exactly {REFERENCE_DIST} meters from the origin. ' +
-              'This position defines the direction of the X-axis, but it is also used for scaling of the system.')
+        infoBox.update(value=f'Step 3. Put the Crazyflie on the positive X-axis, exactly {REFERENCE_DIST} meters from the origin. ' +
+              'This position defines the direction of the X-axis, but it is also used for scaling of the system. See Terminal')
         x_axis = [get_recording(scf)]
 
-        print('Step 4. Put the Crazyflie somehere in the XY-plane, but not on the X-axis.')
-        print('Multiple samples can be recorded if you want to.')
+        infoBox.update(value='Step 4. Put the Crazyflie somehere in the XY-plane, but not on the X-axis.' +
+                'Multiple samples can be recorded if you want to. See Terminal')
         xy_plane = get_multiple_recordings(scf)
 
-        print()
-        print('Step 5. We will now record data from the space you plan to fly in and optimize the base station ' +
+        infoBox.update(value='Step 5. We will now record data from the space you plan to fly in and optimize the base station ' +
               'geometry based on this data. Move the Crazyflie around, try to cover all of the space, make sure ' +
-              'all the base stations are received and do not move too fast.')
+              'all the base stations are received and do not move too fast. See Terminal')
         default_time = 20
         recording_time = input(f'Enter the number of seconds you want to record ({default_time} by default), ' +
                                'recording starts when you hit enter. ')
@@ -369,11 +366,11 @@ def connect_and_estimate(uri: str, file_name: str | None = None):
             write_to_file(file_name, origin, x_axis, xy_plane, samples)
             print(f'Wrote data to file {file_name}')
 
-        print('Step 6. Estimating geometry...')
+        infoBox.update(value='Step 6. Estimating geometry...')
         bs_poses = estimate_geometry(origin, x_axis, xy_plane, samples)
-        print('  Geometry estimated')
+        infoBox.update(value=f'  Geometry estimated')
 
-        print('Step 7. Upload geometry to the Crazyflie')
+        infoBox.update(value=f'Step 7. Upload geometry to the Crazyflie. See Terminal')
         input('Press enter to upload geometry. ')
         upload_geometry(scf, bs_poses)
         print('Geometry uploaded')
@@ -439,18 +436,7 @@ def moveXZ(line, XOffset, pc, velocity=0.2):
             pc.go_to(XOffset, line[i][0], line[i][1], velocity)
             time.sleep(0.2) 
 
-           #if ((position_estimate[0] + (position_estimate[0] - line[i][0])) <= BOX_LIMIT) and ((position_estimate[2] + (position_estimate[2] - line[i][1])) <= BOX_LIMIT):
-            #    newX = position_estimate[0] - line[i][0]
-            #    newZ = position_estimate[2] - line[i][1]
-            #    mc.move_distance(newX, 0.0, newZ, velocity)
-            #else:
-            #    x=0
-                #newX = [0] - line[i][0]
-                #newZ = currentPosition[2] - line[i][1]
-                #mc.move_distance(BOX_LIMIT - currentPosition[0], 0.0, BOX_LIMIT - currentPosition[2], velocity)
-                #currentPosition[0] = currentPosition[0] + newX
-                #currentPosition[2] = currentPosition[2] + newZ
-                #time.sleep(0.1)
+           
     return 0
 
 
@@ -490,24 +476,24 @@ def draw_lines(lines, scf):
             redline = normalising_corridinates(redWaypoints)
             moveXZ(redline, -0.1, pc)
             ringOff(scf)
-
-        #if lines[1]:
-            #moveY(mc,0.1)
-            #time.sleep(0.5)
-            #numberOfPoints = len(lines[1])
-            #GreenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
-            #moveXZ(mc,GreenWaypoints)
-        #if lines[2]:
-            #moveY(mc,0.1)
-            #time.sleep(0.5)
-            #numberOfPoints = len(lines[2])
-            #GreenWaypoints = lines[2][0::round(numberOfPoints/samplingFactor)]
-            #moveXZ(mc,GreenWaypoints)
-
+        if lines[1]:
+            ringGreen(scf)
+            time.sleep(0.5)
+            numberOfPoints = len(lines[1])
+            greenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            moveXZ(greenWaypoints, 0,pc)
+            ringOff(scf)
+        if lines[2]:
+            ringBlue(scf)
+            time.sleep(0.5)
+            numberOfPoints = len(lines[1])
+            blueWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            moveXZ(blueWaypoints, 0.1,pc)
+            ringOff(scf)
         pc.land()
 
 
-def submit_drawing(lines,dronechannel):
+def submit_drawing(lines,dronechannel, infoBox):
     """
     This takes the line coordinated drawn by the user and converts them into 
     Movement instruction for the drone
@@ -521,7 +507,7 @@ def submit_drawing(lines,dronechannel):
     file_name = None
     # file_name = 'lh_geo_estimate_data.pickle'
 
-    connect_and_estimate(dronechannel, file_name=file_name)
+    connect_and_estimate(dronechannel, infoBox, file_name=file_name)
 
     with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
         
@@ -571,7 +557,7 @@ def main():
                 enable_events=True,
                 background_color='white',
                 drag_submits=True) ],
-                [sg.Text(key='info', size=(40, 1))]]
+                [sg.Text(key='info', size=(40, 3))]]
     
     layout = [
         [
@@ -585,6 +571,8 @@ def main():
     graph = window["-GRAPH-"]  # type: sg.Graph
     current_color = 'Red'
     dronechannel = DRONE_CHANNEL[0]
+    info = window["info"]
+    info.update(value="Please ensure drone channel is selected before drawing")
 
     dragging = False
     start_point = end_point = prior_rect = None
@@ -594,12 +582,6 @@ def main():
         event, values = window.read()
         if event == sg.WIN_CLOSED:
             break 
-        if event in ('-MOVE-', '-MOVEALL-'):
-            # graph.Widget.config(cursor='fleur')
-            graph.set_cursor(cursor='fleur')          # not yet released method... coming soon!
-        elif not event.startswith('-GRAPH-'):
-            graph.set_cursor(cursor='left_ptr')       # not yet released method... coming soon!
-            # graph.Widget.config(cursor='left_ptr')
 
         if event == "-GRAPH-":  # if there's a " event, then it's a mouse
             x, y = values["-GRAPH-"]
@@ -609,24 +591,21 @@ def main():
                 lastxy = x, y
             else:
                 end_point = (x, y)
-            #if prior_rect:
-                #graph.delete_figure(prior_rect)
             lastxy = [x,y]
             if None not in (start_point, end_point):
                 current_color = values['-COLOR-']
+                dronechannel = values['-CHANNEL-']
                 if values['-LINE-']== True:
                     graph.draw_point(lastxy, size=15, color=current_color)
                     lines[COLORS.index(current_color)].append(lastxy)
         elif event.endswith('+UP'):  
-            info = window["info"]
-            info.update(value=f"grabbed rectangle from {start_point} to {end_point}")
+            #info = window["info"]
+            #info.update(value=f"grabbed rectangle from {start_point} to {end_point}")
             start_point, end_point = None, None  
             dragging = False
-        elif event == '-CHANNEL-':
-            dronechannel = values['-CHANNEL-']
         elif event == '-DRAWING-':
                
-                submit_drawing(lines,dronechannel)
+                submit_drawing(lines,dronechannel, window["info"])
 
     window.close()
 
