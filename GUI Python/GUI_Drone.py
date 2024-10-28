@@ -44,6 +44,7 @@ REFERENCE_DIST = 1.0
 BOX_LIMIT = 1
 position_estimate =[0,0,0]
 origin =[0,0,0]
+calibration_info = None 
 #we draw on the xz plane
 
 #Calibration Code
@@ -333,47 +334,44 @@ def get_multiple_recordings(scf: SyncCrazyflie):
     return data
 
 
-def connect_and_estimate(uri: str, infoBox,file_name: str | None = None):
+def connect_and_estimate(scf, infoBox,file_name: str | None = None):
     """Connect to a Crazyflie, collect data and estimate the geometry of the system"""
-    infoBox.update(value=f'Step 1. Connecting to the Crazyflie on uri {uri}...')
-    with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        infoBox.update(value='  Connected')
-        time.sleep(0.5)
-        infoBox.update(value='Step 2. Put the Crazyflie where you want the origin of your coordinate system. Look at terminal for step Instructions')
-        time.sleep(0.5)
-        origin = get_recording(scf)
+    
+    infoBox.update(value='Step 2. Put the Crazyflie where you want the origin of your coordinate system. Look at terminal for step Instructions')
+    time.sleep(0.5)
+    origin = get_recording(scf)
 
-        infoBox.update(value=f'Step 3. Put the Crazyflie on the positive X-axis, exactly {REFERENCE_DIST} meters from the origin. ' +
+    infoBox.update(value=f'Step 3. Put the Crazyflie on the positive X-axis, exactly {REFERENCE_DIST} meters from the origin. ' +
               'This position defines the direction of the X-axis, but it is also used for scaling of the system. See Terminal')
-        x_axis = [get_recording(scf)]
+    x_axis = [get_recording(scf)]
 
-        infoBox.update(value='Step 4. Put the Crazyflie somehere in the XY-plane, but not on the X-axis.' +
+    infoBox.update(value='Step 4. Put the Crazyflie somehere in the XY-plane, but not on the X-axis.' +
                 'Multiple samples can be recorded if you want to. See Terminal')
-        xy_plane = get_multiple_recordings(scf)
+    xy_plane = get_multiple_recordings(scf)
 
-        infoBox.update(value='Step 5. We will now record data from the space you plan to fly in and optimize the base station ' +
+    infoBox.update(value='Step 5. We will now record data from the space you plan to fly in and optimize the base station ' +
               'geometry based on this data. Move the Crazyflie around, try to cover all of the space, make sure ' +
               'all the base stations are received and do not move too fast. See Terminal')
-        default_time = 20
-        recording_time = input(f'Enter the number of seconds you want to record ({default_time} by default), ' +
+    default_time = 20
+    recording_time = input(f'Enter the number of seconds you want to record ({default_time} by default), ' +
                                'recording starts when you hit enter. ')
-        recording_time_s = parse_recording_time(recording_time, default_time)
-        print('  Recording started...')
-        samples = record_angles_sequence(scf, recording_time_s)
-        print('  Recording ended')
+    recording_time_s = parse_recording_time(recording_time, default_time)
+    print('  Recording started...')
+    samples = record_angles_sequence(scf, recording_time_s)
+    print('  Recording ended')
 
-        if file_name:
-            write_to_file(file_name, origin, x_axis, xy_plane, samples)
-            print(f'Wrote data to file {file_name}')
+    if file_name:
+        write_to_file(file_name, origin, x_axis, xy_plane, samples)
+        print(f'Wrote data to file {file_name}')
 
-        infoBox.update(value='Step 6. Estimating geometry...')
-        bs_poses = estimate_geometry(origin, x_axis, xy_plane, samples)
-        infoBox.update(value=f'  Geometry estimated')
+    infoBox.update(value='Step 6. Estimating geometry...')
+    calibration_info = estimate_geometry(origin, x_axis, xy_plane, samples)
+    infoBox.update(value=f'  Geometry estimated')
 
-        infoBox.update(value=f'Step 7. Upload geometry to the Crazyflie. See Terminal')
-        input('Press enter to upload geometry. ')
-        upload_geometry(scf, bs_poses)
-        print('Geometry uploaded')
+    infoBox.update(value=f'Step 7. Upload geometry to the Crazyflie. See Terminal')
+    input('Press enter to upload geometry. ')
+    upload_geometry(scf, calibration_info)
+    print('Geometry uploaded')
 
 
 
@@ -493,7 +491,7 @@ def draw_lines(lines, scf):
         pc.land()
 
 
-def submit_drawing(lines,dronechannel, infoBox):
+def submit_drawing(lines,dronechannel, infoBox, C_Flag):
     """
     This takes the line coordinated drawn by the user and converts them into 
     Movement instruction for the drone
@@ -507,30 +505,41 @@ def submit_drawing(lines,dronechannel, infoBox):
     file_name = None
     # file_name = 'lh_geo_estimate_data.pickle'
 
-    connect_and_estimate(dronechannel, infoBox, file_name=file_name)
 
-    with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
-        
-
-        #scf.cf.param.add_update_callback(group='deck', name='bcFlow2',
-         #                                cb=param_deck_flow)
-        #time.sleep(1)
-
-        logconf = LogConfig(name='Position', period_in_ms=10)
-        logconf.add_variable('stateEstimate.x', 'float')
-        logconf.add_variable('stateEstimate.y', 'float')
-        logconf.add_variable('stateEstimate.z', 'float')
-        scf.cf.log.add_config(logconf)
-        logconf.data_received_cb.add_callback(log_pos_callback)
-
-        #if not deck_attached_event.wait(timeout=5):
-        #    print('No flow deck detected!')
-        #    sys.exit(1)
-
-        logconf.start()
-        draw_lines(lines,scf)
-        return
     
+    infoBox.update(value=f'Step 1. Connecting to the Crazyflie on channel {dronechannel}...')
+    try:
+        with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
+            infoBox.update(value='  Connected')
+            time.sleep(1)
+
+            if C_Flag == True:
+                connect_and_estimate(scf, infoBox, file_name=file_name)
+            elif calibration_info:
+                upload_geometry(scf, calibration_info)
+                infoBox.update(value='Geometry uploaded')
+            else:
+                infoBox.update(value='No Calibration Data, Please select Calibration and Resubmit Drawing')
+                SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')).close_link()
+                return
+
+            logconf = LogConfig(name='Position', period_in_ms=10)
+            logconf.add_variable('stateEstimate.x', 'float')
+            logconf.add_variable('stateEstimate.y', 'float')
+            logconf.add_variable('stateEstimate.z', 'float')
+            scf.cf.log.add_config(logconf)
+            logconf.data_received_cb.add_callback(log_pos_callback)
+
+            #if not deck_attached_event.wait(timeout=5):
+            #    print('No flow deck detected!')
+            #    sys.exit(1)
+
+            logconf.start()
+            draw_lines(lines,scf)
+            return
+    except:
+        infoBox.update(value=f'Drone on channel {dronechannel} not detected, please ensure Channel is Correct and drone is Turned on.')
+
     #return
 
 DRONE_CHANNEL =['radio://0/19/2M/EE5C21CF18','radio://0/26/2M/EE5C21CF25']
@@ -546,7 +555,9 @@ def main():
     rightColumn = [[sg.T('Controls:', enable_events=True)],
                    [sg.Text('Choose Drone Channel:'), sg.Combo(DRONE_CHANNEL, default_value='radio://0/26/2M/EE5C21CF25', key='-CHANNEL-')],
                    [sg.R('Draw Line', 1, key='-LINE-', enable_events=True)],
+                   [sg.R('Calibrate Drone', 1, key='-CALIBRATE-', enable_events=True)],
                    [sg.Text('Choose Color:'), sg.Combo(COLORS, default_value='Red', key='-COLOR-')],
+                   [sg.B('Erase', key='-ERASE-')],
                    [sg.B('Submit Drawing', key='-DRAWING-')]]
     
     leftColumn = [[sg.Graph(
@@ -571,6 +582,7 @@ def main():
     graph = window["-GRAPH-"]  # type: sg.Graph
     current_color = 'Red'
     dronechannel = DRONE_CHANNEL[0]
+    calibrationFlag = False
     info = window["info"]
     info.update(value="Please ensure drone channel is selected before drawing")
 
@@ -594,7 +606,6 @@ def main():
             lastxy = [x,y]
             if None not in (start_point, end_point):
                 current_color = values['-COLOR-']
-                dronechannel = values['-CHANNEL-']
                 if values['-LINE-']== True:
                     graph.draw_point(lastxy, size=15, color=current_color)
                     lines[COLORS.index(current_color)].append(lastxy)
@@ -603,9 +614,14 @@ def main():
             #info.update(value=f"grabbed rectangle from {start_point} to {end_point}")
             start_point, end_point = None, None  
             dragging = False
+        elif event == '-ERASE-':
+            lines = [[],[],[]]
+            window['-GRAPH-'].erase()
+
         elif event == '-DRAWING-':
-               
-                submit_drawing(lines,dronechannel, window["info"])
+            calibrationFlag = values['-CALIBRATE-']
+            dronechannel = values['-CHANNEL-']
+            submit_drawing(lines,dronechannel, window["info"], calibrationFlag)
 
     window.close()
 
