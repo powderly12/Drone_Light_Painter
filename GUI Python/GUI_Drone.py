@@ -44,7 +44,8 @@ REFERENCE_DIST = 1.0
 BOX_LIMIT = 1
 position_estimate =[0,0,0]
 origin =[0,0,0]
-calibration_info = None 
+calibration_uploaded = False
+debug = True
 #we draw on the xz plane
 
 #Calibration Code
@@ -343,6 +344,7 @@ def connect_and_estimate(scf, infoBox,file_name: str | None = None):
 
     infoBox.update(value=f'Step 3. Put the Crazyflie on the positive X-axis, exactly {REFERENCE_DIST} meters from the origin. ' +
               'This position defines the direction of the X-axis, but it is also used for scaling of the system. See Terminal')
+    time.sleep(0.5)
     x_axis = [get_recording(scf)]
 
     infoBox.update(value='Step 4. Put the Crazyflie somehere in the XY-plane, but not on the X-axis.' +
@@ -372,6 +374,7 @@ def connect_and_estimate(scf, infoBox,file_name: str | None = None):
     input('Press enter to upload geometry. ')
     upload_geometry(scf, calibration_info)
     print('Geometry uploaded')
+    return
 
 
 
@@ -406,14 +409,6 @@ def log_pos_callback(timestamp, data, logconf):
     position_estimate[1] = data['stateEstimate.y']
     position_estimate[2] = data['stateEstimate.z']
 
-def param_deck_flow(_, value_str):
-    value = int(value_str)
-    print(value)
-    if value:
-        deck_attached_event.set()
-        print('Deck is attached!')
-    else:
-        print('Deck is NOT attached!')
 
 def moveX(pc, x):
     pc.go_to(x, 0, 0, velocity=0.2)
@@ -423,7 +418,6 @@ def moveX(pc, x):
 def moveXZ(line, XOffset, pc, velocity=0.2):
     
     for i in range(0,len(line)):# THIS SHOULD WORK BUT DOESN'T INCLUDE LOGGING SO SOMETHING IS MISSING
-            
             if i == 0:
                 pc.go_to(0, 0, line[i][1], velocity)
                 time.sleep(0.2)
@@ -431,8 +425,9 @@ def moveXZ(line, XOffset, pc, velocity=0.2):
                 time.sleep(0.2)
                 pc.go_to(XOffset, line[i][0], line[i][1], velocity)
                 time.sleep(0.2)
-            pc.go_to(XOffset, line[i][0], line[i][1], velocity)
-            time.sleep(0.2) 
+            else:
+                pc.go_to(XOffset, line[i][0], line[i][1], velocity)
+                time.sleep(0.2) 
 
            
     return 0
@@ -472,20 +467,35 @@ def draw_lines(lines, scf):
             numberOfPoints = len(lines[0])
             redWaypoints = lines[0][0::round(numberOfPoints/samplingFactor)]
             redline = normalising_corridinates(redWaypoints)
+            if debug == True:
+                with open('Red_Norm_Coordinates.txt', 'w') as f:
+        	        for line in redline:
+                            f.write(f"{line}\n")
             moveXZ(redline, -0.1, pc)
             ringOff(scf)
         if lines[1]:
+
             ringGreen(scf)
             time.sleep(0.5)
             numberOfPoints = len(lines[1])
             greenWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
-            moveXZ(greenWaypoints, 0,pc)
+            greenline = normalising_corridinates(greenWaypoints)
+            if debug == True:
+                with open('Green_Norm_Coordinates.txt', 'w') as f:
+        	        for line in greenline:
+                            f.write(f"{line}\n")
+            moveXZ(greenline, 0,pc)
             ringOff(scf)
         if lines[2]:
             ringBlue(scf)
             time.sleep(0.5)
             numberOfPoints = len(lines[1])
             blueWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            blueline = normalising_corridinates(blueWaypoints)
+            if debug == True:
+                with open('Blue_Norm_Coordinates.txt', 'w') as f:
+        	        for line in blueline:
+                            f.write(f"{line}\n")
             moveXZ(blueWaypoints, 0.1,pc)
             ringOff(scf)
         pc.land()
@@ -504,7 +514,11 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
     # Set a file name to write the measurement data to file. Useful for debugging
     file_name = None
     # file_name = 'lh_geo_estimate_data.pickle'
-
+    
+    if debug == True:
+                with open('Coordinates.txt', 'w') as f:
+        	        for line in lines[0]:
+                            f.write(f"{line}\n")
 
     
     infoBox.update(value=f'Step 1. Connecting to the Crazyflie on channel {dronechannel}...')
@@ -512,12 +526,13 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
         with SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')) as scf:
             infoBox.update(value='  Connected')
             time.sleep(1)
+            ringOff(scf)
 
             if C_Flag == True:
                 connect_and_estimate(scf, infoBox, file_name=file_name)
-            elif calibration_info:
-                upload_geometry(scf, calibration_info)
-                infoBox.update(value='Geometry uploaded')
+                calibration_uploaded = True 
+            elif calibration_uploaded:
+                infoBox.update(value='Previously Geometry uploaded')
             else:
                 infoBox.update(value='No Calibration Data, Please select Calibration and Resubmit Drawing')
                 SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')).close_link()
@@ -529,12 +544,14 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
             logconf.add_variable('stateEstimate.z', 'float')
             scf.cf.log.add_config(logconf)
             logconf.data_received_cb.add_callback(log_pos_callback)
-
-            #if not deck_attached_event.wait(timeout=5):
-            #    print('No flow deck detected!')
-            #    sys.exit(1)
-
             logconf.start()
+
+
+            if debug == True:
+                with open('Coordinates.txt', 'w') as f:
+        	        for line in lines:
+                            f.write(f"{line}\n")
+        
             draw_lines(lines,scf)
             return
     except:

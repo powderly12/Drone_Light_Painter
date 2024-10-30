@@ -412,7 +412,7 @@ if __name__ == '__main__':
     connect_and_estimate(uri, file_name=file_name)
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        with PositionHlCommander(scf, controller=PositionHlCommander.CONTROLLER_PID) as pc:
+        with PositionHlCommander(scf, controller=PositionHlCommander.CONTROLLofffER_PID) as pc:
             x=0
             pc.land()
 
