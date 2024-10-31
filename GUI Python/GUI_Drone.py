@@ -44,6 +44,7 @@ REFERENCE_DIST = 1.0
 BOX_LIMIT = 1
 position_estimate =[0,0,0]
 origin =[0,0,0]
+calibration_info = None
 calibration_uploaded = False
 debug = True
 #we draw on the xz plane
@@ -501,7 +502,6 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
     """
     This takes the line coordinated drawn by the user and converts them into 
     Movement instruction for the drone
-    will have to address gap in drawings
     """
     #Connect to drone and start logging
 
@@ -529,6 +529,7 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
                 calibration_uploaded = True 
             elif calibration_uploaded:
                 infoBox.update(value='Previously Geometry uploaded')
+                upload_geometry(scf, calibration_info)
             else:
                 infoBox.update(value='No Calibration Data, Please select Calibration and Resubmit Drawing')
                 SyncCrazyflie(dronechannel, cf=Crazyflie(rw_cache='./cache')).close_link()
@@ -549,6 +550,9 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
                             f.write(f"{line}\n")
         
             draw_lines(lines,scf)
+            
+            scf.close_link()
+            infoBox.update(value='disconnected')
             return
     except:
         infoBox.update(value=f'Drone on channel {dronechannel} not detected, please ensure Channel is Correct and drone is Turned on.')
