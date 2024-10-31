@@ -410,10 +410,6 @@ def log_pos_callback(timestamp, data, logconf):
     position_estimate[2] = data['stateEstimate.z']
 
 
-def moveX(pc, x):
-    pc.go_to(x, 0, 0, velocity=0.2)
-    
-
     
 def moveXZ(line, XOffset, pc, velocity=0.2):
     
@@ -471,7 +467,7 @@ def draw_lines(lines, scf):
                 with open('Red_Norm_Coordinates.txt', 'w') as f:
         	        for line in redline:
                             f.write(f"{line}\n")
-            moveXZ(redline, -0.1, pc)
+            moveXZ(redline, -0.2, pc)
             ringOff(scf)
         if lines[1]:
 
@@ -489,14 +485,14 @@ def draw_lines(lines, scf):
         if lines[2]:
             ringBlue(scf)
             time.sleep(0.5)
-            numberOfPoints = len(lines[1])
-            blueWaypoints = lines[1][0::round(numberOfPoints/samplingFactor)]
+            numberOfPoints = len(lines[2])
+            blueWaypoints = lines[2][0::round(numberOfPoints/samplingFactor)]
             blueline = normalising_corridinates(blueWaypoints)
             if debug == True:
                 with open('Blue_Norm_Coordinates.txt', 'w') as f:
         	        for line in blueline:
                             f.write(f"{line}\n")
-            moveXZ(blueWaypoints, 0.1,pc)
+            moveXZ(blueline, 0.2,pc)
             ringOff(scf)
         pc.land()
 
@@ -517,7 +513,7 @@ def submit_drawing(lines,dronechannel, infoBox, C_Flag):
     
     if debug == True:
                 with open('Coordinates.txt', 'w') as f:
-        	        for line in lines[0]:
+        	        for line in lines[2]:
                             f.write(f"{line}\n")
 
     
