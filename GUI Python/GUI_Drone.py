@@ -496,6 +496,7 @@ def draw_lines(lines, scf):
             moveXZ(blueline, 0.2,pc)
             ringOff(scf)
         pc.land()
+        time.sleep(1)
 
 
 def submit_drawing(lines,dronechannel, infoBox, C_Flag):
